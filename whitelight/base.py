@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 Name:
-    white_light.py
+    base.py
 Purpose:
     干渉データを解析してpeaks distanceを計算
 Specification:
     モジュール
 Environment:
     Python 3.5.1
-
+    
 """
 import numpy as np
 from scipy import signal
@@ -44,25 +44,25 @@ class WhiteLight(object):
         #   干渉縞を二乗
         self.fringe_sq_ = self.fringe * self.fringe
 
-    def spe_ana(self, wave):
+    def spe_ana(self, wave, axis):
         """
         スペクトルアナライザー（スペクトルをプロット）
-
+        
         Parameters
             wave : array
                 信号
-
+            
         """
         number = len(wave)
         spectrum = fftpack.fft(wave)
         frecency = [abs(k * self.fs / number) for k in range(number)]
-        plt.plot(frecency, abs(spectrum))
-        plt.xlim([0, np.max(frecency) / 2])
+        axis.plot(frecency, abs(spectrum))
+        axis.set_xlim([0, np.max(frecency)/2])
 
     def opt_calc(self, wave, point, cof_HeNe, wave_len):
         """
         HeNe干渉縞から位置を計算
-
+        
         Parameters
             wave : array
                 He-Ne干渉縞データ
@@ -72,14 +72,13 @@ class WhiteLight(object):
                 He-Ne干渉縞のスムージング用カットオフ周波数
             wave_len : float
                 He-Neレーザの波長
-
+        
         Returns
             position : float
                 He-Ne干渉縞から計算したpointの相対位置
                 光路長ベースでの計算
-
+                
         """
-
         def search_n(point, points, position='n'):
             """
             ある点から最も近い点群中の点のインデックスを返す
@@ -120,7 +119,7 @@ class WhiteLight(object):
                 print('error')
                 sys.exit()
 
-        # 信号をスムージング
+        #   信号をスムージング
         self.laser_smooth_ = lpf(wave, self.fs, cof_HeNe)
         #   極大値を求める
         maxes = signal.argrelmax(self.laser_smooth_)[0]
@@ -128,7 +127,7 @@ class WhiteLight(object):
         mins = signal.argrelmin(self.laser_smooth_)[0]
         #   内挿時のpointのy座標
         point_l = math.floor(point)
-        f = interpolate.interp1d([point_l, point_l + 1], [self.laser_smooth_[point_l], self.laser_smooth_[point_l + 1]])
+        f = interpolate.interp1d([point_l, point_l+1], [self.laser_smooth_[point_l], self.laser_smooth_[point_l+1]])
         y_point = f(point)
 
         #   point付近の極大、極小値を求める
@@ -155,29 +154,29 @@ class WhiteLight(object):
         wave_number = list(maxes).index(M1) + dn / (2 * np.pi)
         return wave_number * wave_len
 
-    def calc_eps(self, cof_env, ep_sens, method='SL', f_rate=0.5):
+    def calc_EPs(self, cof_env, ep_sens, method='SL', f_rate=0.5):
         """
         包絡線ピークのインデックスを求める(二乗＋ローパスにより包絡線を求める）
-
+        
         Parameters
             cof_env : float
                 包絡線を求める際のローパスフィルタのカットオフ周波数
             ep_sens : float
                 包絡線のピーク検知の感度（これ以上の極大値をピークとして認識）
-
+        
         Attributes
             fringe_sq_ : array
                 白色干渉縞の二乗
             envelope_ : 
-
+        
         Returns
             eps : list
                 包絡線ピークのインデックスのリスト
-
+        
         """
         """SL法での包絡線を求め、その極大値のインデックスを記録"""
         #   ローパスフィルタをかけ、包絡線を求める
-        self.envelope_ = lpf(self.fringe * self.fringe, self.fs, cof_env)
+        self.envelope_ = lpf(self.fringe_sq_, self.fs, cof_env)
         #   包絡線極大値のインデックスのリストを求める
         env_relmax = signal.argrelmax(self.envelope_)[0]
 
@@ -194,10 +193,10 @@ class WhiteLight(object):
 
         elif method == 'HG':
 
-            def theoritical_envelope(x, a, b, c):
+            def gaussian(xx, a, b, c):
                 """理論的な包絡線（ガウシアン）"""
-                gauss = a * np.exp(-((x - b) ** 2) / (2 * c * c))
-                return gauss
+                yy = a * np.exp(-((xx - b) ** 2) / (2 * c * c))
+                return yy
 
             #   ヒルベルト変換により包絡線を求める
             self.envelope_ = np.abs(signal.hilbert(self.fringe))
@@ -217,20 +216,22 @@ class WhiteLight(object):
                     if self.envelope_[i] < f_rate * self.envelope_[ep]:
                         fit_range = i - ep
                         break
-                # フィッティング範囲のx座標
+                #   フィッティング範囲のx座標
                 x = np.arange(ep - fit_range, ep + fit_range)
                 #   フィッティング範囲のy座標
                 y = self.envelope_[ep - fit_range: ep + fit_range]
                 #   フィッティングの初期値
                 initial = [self.envelope_[ep], ep, fit_range]
                 #   フィッティング
-                coef, pconv = curve_fit(theoritical_envelope, x, y, p0=initial)
+                coef, pconv = curve_fit(gaussian, x, y, p0=initial)
                 #   フィッティングでの頂点のx座標を追加
                 eps.append((coef[1]))
                 #   フィッティング後の包絡線をプロット
-                envelope = [theoritical_envelope(i, coef[0], coef[1], coef[2]) for i in x]
-                plt.plot(x, y, "ro")
-                plt.plot(x, envelope, linewidth=3)
+                envelope = [gaussian(i, coef[0], coef[1], coef[2]) for i in x]
+                fig_gauss = plt.figure(3)
+                ax = fig_gauss.add_subplot(111)
+                ax.plot(x, y, "ro", markersize=2)
+                ax.plot(x, envelope, linewidth=3)
         else:
             print('定義されてない手法です')
             sys.exit()
@@ -355,6 +356,9 @@ def bpf(x, fs, fe1, fe2):
             X[k] = complex(0, 0)
     y = np.real(fftpack.ifft(X))
     return y
+
+
+
 
 
 def read_position(f_path):
