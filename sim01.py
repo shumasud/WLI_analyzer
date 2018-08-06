@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Name:
-    simulator.py
+    sim01.py
 Purpose:
     白色干渉のシミュレーター
 Specification:
