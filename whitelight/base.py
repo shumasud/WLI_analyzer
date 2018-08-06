@@ -19,6 +19,83 @@ import sys
 from scipy.optimize import curve_fit
 import math
 
+class Envelope(object):
+    def __init__(self, x, y, ep0):
+        self.offset = 0
+        self.peak = [x[ep0], y[ep0]]
+        self._x = x
+        self._y = y
+        self._find_peak(ep0)
+
+    def _find_peak(self, ep0, f_rate=0.5):
+        """
+        包絡線ピークのインデックスを求める(二乗＋ローパスにより包絡線を求める）
+        緊急作業につき，今後’絶対’修正する
+        """
+        # フィッティングする関数
+        def gaussian(xx, a, b, c):
+            yy = a * np.exp(-((xx - b) ** 2) / (2 * c * c))
+            return yy
+
+        #   フィッティング範囲を決定
+        fit_range = 0
+        for i in range(ep0, len(self._y)):
+            if self._y[i] < f_rate * self._y[ep0]:
+                fit_range = i - ep0
+                break
+        self.offset = ep0-fit_range
+        xx = self._x[ (ep0-fit_range) : (ep0+fit_range) ]
+        yy = self._y[ (ep0-fit_range) : (ep0+fit_range) ]
+
+        #   フィッティング
+        try:
+            initial = [self._x[ep0], self._y[ep0], fit_range]
+            coef, pconv = curve_fit(gaussian, xx, yy, p0=initial)
+        except RuntimeError:
+            print("fail to fit on ", initial)
+        else:
+            #   フィッティング結果から頂点のx座標と包絡線を保存
+            self.peak = (coef[1], gaussian(coef[1], *coef))
+            self._y = [gaussian(i, coef[0], coef[1], coef[2]) for i in xx]
+            self._x = xx
+
+    def show(self, ax=None):
+        if ax:
+            ax.plot(self._x, self._y)
+            ax.plot(self.peak[0], self.peak[1], 'o')
+        print("ep: " + str(round(self.peak[0], 3)) + "um")
+        return
+
+class Fringes(object):
+    def __init__(self, x=[], f=[], param=None):
+        self.x = x
+        self.f = f
+        self.peaks = []
+        self.param = param
+
+    def find_peaks(self, threshold=0.5):
+        #   包絡線極大値のインデックスのリストを求める
+        env = abs(signal.hilbert(self.f))
+        relmaxs = signal.argrelmax(env)[0]
+        #   閾値を越えた極大値のみ処理
+        self.peaks = []
+        for relmax in relmaxs:
+            if threshold < env[relmax]:
+                ep = Envelope(self.x, env, relmax)
+                self.peaks.append(ep)
+
+    def down_sample(self, step):
+        self.x = self.x[::step]
+        self.f = self.f[::step]
+
+    def show(self, ax = None):
+        if ax:
+            ax.plot(self.x, self.f)
+            ax.grid(which='major', color='black', linestyle='-')
+            for ep in self.peaks:
+                ep.show(ax)
+            ax.legend(["fringe", "envelope", "fitting"])
+
 
 class WhiteLight(object):
     """
@@ -44,20 +121,6 @@ class WhiteLight(object):
         #   干渉縞を二乗
         self.fringe_sq_ = self.fringe * self.fringe
 
-    def spe_ana(self, wave, axis):
-        """
-        スペクトルアナライザー（スペクトルをプロット）
-        
-        Parameters
-            wave : array
-                信号
-            
-        """
-        number = len(wave)
-        spectrum = fftpack.fft(wave)
-        frecency = [abs(k * self.fs / number) for k in range(number)]
-        axis.plot(frecency, abs(spectrum))
-        axis.set_xlim([0, np.max(frecency)/2])
 
     def opt_calc(self, wave, point, cof_HeNe, wave_len):
         """
@@ -153,6 +216,28 @@ class WhiteLight(object):
             dn = -np.pi
         wave_number = list(maxes).index(M1) + dn / (2 * np.pi)
         return wave_number * wave_len
+    @staticmethod
+    def search_neighbourhood(target, points, position='n'):
+        """ある点(target)から最も近い点群(points)中の点の番号を返す"""
+        if position == 'n':  # 最も近い点
+            list = []
+            for i in range(len(points)):
+                l = abs(points[i] - target)
+                list.append(l)
+            return np.argmin(list)
+        elif position == 'r':  # 最も近い右側の点
+            if points[np.searchsorted(points, target)] >= target:
+                return np.searchsorted(points, target)
+            else:
+                return np.searchsorted(points, target) + 1
+        elif position == 'l':  # 最も近い左側の点
+            if points[np.searchsorted(points, target)] <= target:
+                return np.searchsorted(points, target)
+            else:
+                return np.searchsorted(points, target) - 1
+        else:
+            print('error')
+            sys.exit()
 
     def calc_EPs(self, cof_env, ep_sens, method='SL', f_rate=0.5):
         """

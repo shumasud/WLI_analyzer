@@ -26,7 +26,7 @@ if __name__ == '__main__':
     offset = 0
 
     # 基準干渉縞作成
-    light = ws.Light(wl_c, wl_bw, wl_step=1 / 1000)
+    light = ws.Light(wl_c, wl_bw, wl_step=10 / 1000)
     light.make_scale(scan_len, scan_step)
     light.make_scale_noised(0.000/1000, 0/1000)
     light.make_fringe(l_bs=l_bs, offset=offset, material='BK7')
@@ -40,9 +40,9 @@ if __name__ == '__main__':
     # light3.make_fringe(l_bs=l_bs, offset=offset, material='BK7')
     light3.down_sample(100)
 
-    light.peak_detect()
-    light2.peak_detect()
-    light3.peak_detect()
+    light.find_peaks()
+    light2.find_peaks()
+    light3.find_peaks()
 
     # 表示
     fig1 = plt.figure()

@@ -1,76 +1,10 @@
 from pylab import *
 from scipy import signal
 from scipy.optimize import curve_fit
+from . import base as wl
 
 
-class Envelope(object):
-    def __init__(self, x, y, ep0):
-        self.__x = x
-        self.__y = y
-        self.__envelope = []
-        self.__peak = 0
-        self.make_envelope(ep0)
-
-    @staticmethod
-    def search_neighbourhood(point, points, position='n'):
-        """ある点(point)から最も近い点群(points)中の点の番号を返す"""
-        if position == 'n':  # 最も近い点
-            list = []
-            for i in range(len(points)):
-                l = abs(points[i] - point)
-                list.append(l)
-            return np.argmin(list)
-        elif position == 'r':  # 最も近い右側の点
-            if points[np.searchsorted(points, point)] >= point:
-                return np.searchsorted(points, point)
-            else:
-                return np.searchsorted(points, point) + 1
-        elif position == 'l':  # 最も近い左側の点
-            if points[np.searchsorted(points, point)] <= point:
-                return np.searchsorted(points, point)
-            else:
-                return np.searchsorted(points, point) - 1
-        else:
-            print('error')
-            sys.exit()
-
-    def make_envelope(self, ep0, f_rate=0.5):
-        """
-        包絡線ピークのインデックスを求める(二乗＋ローパスにより包絡線を求める）
-        緊急作業につき，今後’絶対’修正する
-        """
-        # フィッティングする関数
-        def gaussian(xx, a, b, c):
-            yy = a * np.exp(-((xx - b) ** 2) / (2 * c * c))
-            return yy
-
-        #   フィッティング範囲を決定
-        # fit_range = 1
-        for i in range(ep0, len(self.__y)):
-            if self.__y[i] < f_rate * self.__y[ep0]:
-                fit_range = i - ep0
-                break
-        xx = self.__x[ (ep0-fit_range) : (ep0+fit_range) ]
-        yy = self.__y[ (ep0-fit_range) : (ep0+fit_range) ]
-
-        #   フィッティング
-        initial = [self.__x[ep0], self.__y[ep0], fit_range]
-        coef, pconv = curve_fit(gaussian, xx, yy)
-        # coef, pconv = curve_fit(gaussian, xx, yy, p0=initial)
-
-        #   フィッティング結果から頂点のx座標と包絡線を保存
-        self.__peak = (coef[1], gaussian(coef[1], *coef))
-        self.__envelope = [gaussian(i, coef[0], coef[1], coef[2]) for i in xx]
-        self.__x = xx
-
-    def show(self, ax=None):
-        if ax:
-            ax.plot(self.__x, self.__envelope)
-            ax.plot(self.__peak[0], self.__peak[1], 'o')
-            print("ep: " + str(round(self.__peak[0], 3)) + "um")
-        return
-
-class Light(object):
+class Light(wl.Fringes):
     """
     パラメータ
     ------------
@@ -86,15 +20,12 @@ class Light(object):
 
     """
 
-    def __init__(self, wl_c, wl_bw, wl_step=1 / 1000):
+    def __init__(self, wl_c=1560/1000, wl_bw=25/1000, wl_step=1/1000):
+        super().__init__()
         self.wl_c = wl_c
         self.wl_bw = wl_bw
         self.wl_step = wl_step
         self.wl_list_ = np.arange(wl_c - wl_bw / 2 * 2, (wl_c + wl_step) + wl_bw / 2 * 2, wl_step)  # 波長のリスト
-        self.__scale = None
-        self.__fringe = None
-        self.__covering = None
-        self.__EPs = []
 
 
     @staticmethod
@@ -110,8 +41,9 @@ class Light(object):
         C1 = 6.00069867E-03
         C2 = 2.00179144E-02
         C3 = 1.03560653E+02
-        n = np.sqrt(
-            1 + B1 * (wl * wl) / (wl * wl - C1) + B2 * (wl * wl) / (wl * wl - C2) + B3 * (wl * wl) / (wl * wl - C3))
+        wl2 = wl**2
+
+        n = np.sqrt( 1 + B1*wl2 / (wl2 - C1) + B2*wl2 / (wl2 - C2) + B3*wl2 / (wl2 - C3) )
         return n
 
     @staticmethod
@@ -134,15 +66,15 @@ class Light(object):
         return f
 
     def make_scale(self, scan_len, scan_step):
-        self.__scale = np.arange(-scan_len / 2, scan_len / 2 + scan_step, scan_step)
+        self.x = np.arange(-scan_len / 2, scan_len / 2 + scan_step, scan_step)
 
     def make_scale_noised(self, jitter, grad):
-        self.__scale = jitter * randn(len(self.__scale)) + (1 + grad) * self.__scale
+        self.x = jitter * randn(len(self.x)) + (1 + grad) * self.x
 
     def make_fringe_noised(self, noise, drift):
-        a0 = noise * randn(len(self.__scale))
-        a1 = drift / max(self.__scale) * self.__scale
-        self.__fringe = self.__fringe + a0 + a1
+        a0 = noise * randn(len(self.x))
+        a1 = drift / max(self.x) * self.x
+        self.f = self.f + a0 + a1
 
     def make_fringe(self, l_ref=3000 * 1000, l_bs=0, offset=0, material='BK7'):
         """スケールと干渉縞を作成"""
@@ -154,7 +86,7 @@ class Light(object):
             k_i = 2 * np.pi / wl
             intensity = self.I_gauss(wl)
 
-            phi_x = k_i * self.__scale * 2
+            phi_x = k_i * self.x * 2
             if material == 'BK7':
                 phi_r = np.pi
             else:
@@ -168,40 +100,5 @@ class Light(object):
         print("done")
         fringes = np.array(fringe_list)
         fringe_total = np.sum(fringes, axis=0)  # それぞれの波長での干渉縞を重ね合わせ
-        self.__fringe = fringe_total / max(fringe_total)
-
-    def peak_detect(self, threshold = 0.5):
-        #   包絡線極大値のインデックスのリストを求める
-        self.__covering = abs(signal.hilbert(self.__fringe))
-        relmaxs = signal.argrelmax(self.__covering)[0]
-        #   閾値を越えた極大値のみ処理
-        for relmax in relmaxs:
-            if self.__covering[relmax] < threshold:
-                continue
-            else:
-                print(relmax)
-                ep = Envelope(self.__scale, self.__covering, relmax)
-                self.__EPs.append(ep)
-
-
-    def down_sample(self, step):
-        self.__scale = self.__scale[::step]
-        self.__fringe = self.__fringe[::step]
-
-    def show(self, ax = None):
-        if ax:
-            ax.plot(self.__scale, self.__fringe)
-            ax.plot(self.__scale, self.__covering)
-            ax.grid(which='major', color='black', linestyle='-')
-            # for ep in self.__EPs:
-                # ep.show(ax)
-            ax.legend(["fringe", "envelope", "fitting"])
-
-            # ax.scatter(self.__scale[::20], self.__fringe[::20], c = 'red')
-        # """EPとFPを検出"""
-        # self.__ep = argmax(self.envelope_)
-        # fps = signal.argrelmax(self.__fringe)[0]  # 干渉縞の極大値のリスト
-        # self.fp_ = fps[self.search_neighbourhood(argmax(self.envelope_), fps)]
-        # print("ep: " + str(round(self.__scale[self.ep_], 3)) + "um",
-        #       "fp: " + str(round(self.__scale[self.fp_], 3)) + "um")
+        self.f = fringe_total / max(fringe_total)
 
