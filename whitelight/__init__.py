@@ -1,2 +1,2 @@
-__all__ = ["simulator"]
+__all__ = [ "base", "simulator" ]
 
