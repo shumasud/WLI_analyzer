@@ -9,22 +9,25 @@ from . import base as wli
 
 
 class Simulator(object):
-    def __init__(self, *, lambda_c=1560 / 1000, band_w=25 / 1000, wl_step=1 / 1000, scan_w=100):
+    def __init__(self, *, lambda_c=1560 / 1000, band_w=25 / 1000, wl_step=1 / 1000, scan_w=100, scan_step=10 / 1000):
         self.lambda_c = lambda_c
         self.band_w = band_w
         self.wl_step = wl_step
         self.scan_w = scan_w
+        self.scan_step = scan_step
 
-    def make_fringes(self, x, *, peaks=[0], pows=None, noise=[0, 0]):
-        xn = x + noise[0]*np.random.randn(len(x))
+    def make_fringes(self, x=None, peaks=[0], pows=None, noise=[0, 0]):
+        if not x:
+            x = np.arange(min(peaks) - self.scan_w, max(peaks) + self.scan_w, self.scan_step)
+        xn = x + noise[0] * np.random.randn(len(x))
+        f = np.zeros_like(xn)
         if not pows:
             pows = np.ones_like(peaks)
-        f = np.zeros_like(xn)
 
         for (peak, pow) in zip(peaks, pows):
             xslice = np.where((peak - self.scan_w < xn) & (xn < peak + self.scan_w))
             f[xslice] += pow * self._make_fringe(xn[xslice] - peak)
-        fn = f + noise[1]*np.random.randn(len(f))
+        fn = f + noise[1] * np.random.randn(len(f))
 
         return wli.Fringes(x, fn)
 

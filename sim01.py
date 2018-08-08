@@ -6,20 +6,20 @@ import numpy as np
 plt.style.use('seaborn')
 
 if __name__ == '__main__':
-    sim_param = {'lambda_c': 1560 / 1000,
+    SIM_PARAM = {'lambda_c': 1560 / 1000,
                  'band_w': 25 / 1000,
                  'wl_step': 0.1 / 1000,
-                 'scan_w': 300}
-    scan_step = 20 / 1000
+                 'scan_w': 300,
+                 'scan_step': 10 / 1000}
+
     noise = [1/1000, 5/1000]  # noise_x, noise_f
     peaks = [250, 350]
 
     # initialize WLI fringes simulator
-    ws = whitelight.simulator.Simulator(**sim_param)
-    x = np.arange(min(peaks)-sim_param['scan_w'], max(peaks)+sim_param['scan_w'], scan_step)
+    ws = whitelight.simulator.Simulator(**SIM_PARAM)
 
     # generate fringes
-    wav1 = ws.make_fringes(x, peaks=peaks, noise=noise)
+    wav1 = ws.make_fringes(peaks=peaks, noise=noise)
     wav2 = copy.deepcopy(wav1)
     wav2.down_sample(10)
 
