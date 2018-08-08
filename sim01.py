@@ -13,6 +13,7 @@ if __name__ == '__main__':
                  'scan_step': 10 / 1000}
 
     noise = [1/1000, 5/1000]  # noise_x, noise_f
+    noise = [0, 0]
     peaks = [250, 350]
 
     # initialize WLI fringes simulator
