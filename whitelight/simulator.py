@@ -15,14 +15,18 @@ class Simulator(object):
         self.wl_step = wl_step
         self.scan_w = scan_w
 
-    def make_fringes(self, x, peaks=[0], pows=None):
+    def make_fringes(self, x, *, peaks=[0], pows=None, noise=[0, 0]):
+        xn = x + noise[0]*np.random.randn(len(x))
         if not pows:
             pows = np.ones_like(peaks)
-        f = np.zeros_like(x)
+        f = np.zeros_like(xn)
+
         for (peak, pow) in zip(peaks, pows):
-            xslice = np.where((peak - self.scan_w < x) & (x < peak + self.scan_w))
-            f[xslice] += pow * self._make_fringe(x[xslice] - peak)
-        return wli.Fringes(x, f)
+            xslice = np.where((peak - self.scan_w < xn) & (xn < peak + self.scan_w))
+            f[xslice] += pow * self._make_fringe(xn[xslice] - peak)
+        fn = f + noise[1]*np.random.randn(len(f))
+
+        return wli.Fringes(x, fn)
 
     def _make_fringe(self, x, l_bs=0, offset=0, material='BK7'):
         fringe_list = []

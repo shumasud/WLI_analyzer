@@ -1,15 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Name:
-    base.py
-Purpose:
-    干渉データを解析してpeaks distanceを計算
-Specification:
-    モジュール
-Environment:
-    Python 3.5.1
-    
-"""
 import numpy as np
 from scipy import signal
 from scipy import fftpack
@@ -76,8 +64,6 @@ class Envelope(object):
 
         #   フィッティング
         try:
-            # print(self)
-            # print([self.peak[1], self.peak[0], fit_range])
             coef, pconv = curve_fit(gaussian, xx, yy, p0=[self.peak[1], self.peak[0], sigma])
         except RuntimeError:
             print("fail to fit on ", *self.peak)
@@ -107,7 +93,8 @@ class Fringes(object):
 
     def find_peaks(self, threshold=0.5):
         #   包絡線極大値のインデックスのリストを求める
-        self._env = abs(signal.hilbert(self.f))
+        # self._env = abs(signal.hilbert(self.f))
+        self._env = lpf(self.f*self.f, len(self.f), 1000)
         relmaxs = signal.argrelmax(self._env)[0]
         #   閾値を越えた極大値のみ処理
         self.peaks = []
@@ -115,7 +102,6 @@ class Fringes(object):
             if threshold < self._env[relmax]:
                 ep = Envelope(self.x, self._env, relmax)
                 self.peaks.append(ep)
-        print(len(self.peaks))
 
     def down_sample(self, step):
         self.x = self.x[::step]

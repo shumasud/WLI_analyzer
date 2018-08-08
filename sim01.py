@@ -3,28 +3,33 @@ import matplotlib.pyplot as plt
 import whitelight.simulator
 import numpy as np
 
+plt.style.use('seaborn')
+
 if __name__ == '__main__':
     sim_param = {'lambda_c': 1560 / 1000,
                  'band_w': 25 / 1000,
                  'wl_step': 0.1 / 1000,
-                 'scan_w': 200}
-    scan_step = 0.5 / 1000
+                 'scan_w': 300}
+    scan_step = 20 / 1000
+    noise = [1/1000, 5/1000]  # noise_x, noise_f
+    peaks = [250, 350]
 
     # initialize WLI fringes simulator
     ws = whitelight.simulator.Simulator(**sim_param)
-    x = np.arange(0, 500, scan_step)
+    x = np.arange(min(peaks)-sim_param['scan_w'], max(peaks)+sim_param['scan_w'], scan_step)
 
     # generate fringes
-    wav1 = ws.make_fringes(x, [100, 400])
+    wav1 = ws.make_fringes(x, peaks=peaks, noise=noise)
     wav2 = copy.deepcopy(wav1)
-    wav2.down_sample(100)
+    wav2.down_sample(10)
 
     # plot
     fig1 = plt.figure()
-    ax1 = fig1.add_subplot(211)
-    ax2 = fig1.add_subplot(212)
-    wav1.find_peaks()
-    wav2.find_peaks()
+    fig2 = plt.figure()
+    ax1 = fig1.add_subplot(111)
+    ax2 = fig2.add_subplot(111)
+    wav1.find_peaks(0.2)
+    wav2.find_peaks(0.2)
     wav1.show(ax1)
     wav2.show(ax2)
     plt.show()
