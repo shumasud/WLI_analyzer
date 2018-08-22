@@ -3,13 +3,10 @@
 """
 
 from pylab import *
-from scipy import signal
-from scipy.optimize import curve_fit
-
 from . import core as wli
 
 
-class FringesSimulator(object):
+class FringesSimulator():
     """
     a class for generating Fringes object with simulated whitelight interference
     """
@@ -30,6 +27,7 @@ class FringesSimulator(object):
                    'spectrum': 'RECT'}
         self.Ps.update(Ps)
         self._spectrum = []
+        self._fs = 1/self.Ps['scan_step']
 
     def make_fringes(self, x=None, peaks=(0,), pows=None, noise=(0, 0)):
         """
@@ -40,8 +38,8 @@ class FringesSimulator(object):
         x : array, optional
         peaks : array, optional
         pows : array, optional
-        noise : (x noise, f noise), optional
-            Std for x and f noises. (0, 0) as default.
+        noise : (x noise, y noise), optional
+            Std for x and y noises. (0, 0) as default.
 
         Returns
         -------
@@ -57,17 +55,18 @@ class FringesSimulator(object):
             x = np.arange(min(peaks) - self.Ps['scan_w'],
                           max(peaks) + self.Ps['scan_w'], self.Ps['scan_step'])
         xn = x + noise[0] * np.random.randn(len(x))
-        f = np.zeros_like(xn)
+        y = np.zeros_like(x)
         if not pows:
             pows = np.ones_like(peaks)
         self._spectrum = self.Ps['lambda_c'] + np.arange(-self.Ps['band_w'], self.Ps['band_w'], self.Ps['wl_step'])
 
         for (peak, pow) in zip(peaks, pows):
             xslice = np.where((peak - self.Ps['scan_w'] < xn) & (xn < peak + self.Ps['scan_w']))
-            f[xslice] += pow * self._make_fringe(xn[xslice] - peak)
-        fn = f + noise[1] * np.random.randn(len(f))
+            y[xslice] += pow * self._make_fringe(xn[xslice] - peak)
+        yn = y + noise[1] * np.random.randn(len(y))
 
-        return wli.Fringes(x, fn)
+        return wli.Fringes(x, yn, self._fs, **self.Ps)
+
 
     def _make_fringe(self, x, l_bs=0, offset=0):
         """

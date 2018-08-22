@@ -1,37 +1,12 @@
 import numpy as np
-from scipy import signal
 from scipy import fftpack
-from scipy import interpolate
 import matplotlib.pyplot as plt
-import sys
 from scipy.optimize import curve_fit
+from scipy import signal
 import math
 
 
-def search_neighbourhood(target, points, position='n'):
-    """ある点(target)から最も近い点群(points)中の点の番号を返す"""
-    if position == 'n':  # 最も近い点
-        list = []
-        for i in range(len(points)):
-            l = abs(points[i] - target)
-            list.append(l)
-        return np.argmin(list)
-    elif position == 'r':  # 最も近い右側の点
-        if points[np.searchsorted(points, target)] >= target:
-            return np.searchsorted(points, target)
-        else:
-            return np.searchsorted(points, target) + 1
-    elif position == 'l':  # 最も近い左側の点
-        if points[np.searchsorted(points, target)] <= target:
-            return np.searchsorted(points, target)
-        else:
-            return np.searchsorted(points, target) - 1
-    else:
-        print('error')
-        sys.exit()
-
-
-class Envelope(object):
+class EnvelopePeak(object):
     def __init__(self, x, y, ep0):
         self.offset = 0
         self.peak = [x[ep0], y[ep0]]
@@ -81,37 +56,50 @@ class Envelope(object):
         if ax:
             ax.plot(self._x, self._y)
             ax.plot(self.peak[0], self.peak[1], 'o')
+        # print(self._x, self._y)
         return
 
 
 class Fringes(object):
-    def __init__(self, x=[0], f=[0]):
-        self.x = x
-        self.f = f
-        self._env = []
-        self.peaks = []
+    def __init__(self, x=[0], y=[0], fs=1, **detail):
+        """
 
-    def find_peaks(self, threshold=0.5):
-        #   包絡線極大値のインデックスのリストを求める
-        # self._env = abs(signal.hilbert(self.f))
-        self._env = lpf(self.f*self.f, len(self.f), 1000)
-        relmaxs = signal.argrelmax(self._env)[0]
-        #   閾値を越えた極大値のみ処理
+        Parameters
+        ----------
+        x
+        y
+        fs
+        detail
+        """
+        self.x = x
+        self.y = y
+        self.fs = fs
+        self.env = []
         self.peaks = []
+        self.detail = detail
+
+    def find_peaks(self, threshold=0.5, cutoffrate=50):
+        #   包絡線極大値のインデックスのリストを求める
+        self.env = lpf( self.y**2, self.fs, self.fs/cutoffrate )
+        relmaxs = signal.argrelmax(self.env, order=1)[0]
+        #   閾値を越えた極大値のみ処理
+        threshold = self.env.max() * threshold
+        self.peaks = []
+        self.env = np.abs(signal.hilbert(self.y))
         for relmax in relmaxs:
-            if threshold < self._env[relmax]:
-                ep = Envelope(self.x, self._env, relmax)
+            if threshold < self.env[relmax]:
+                ep = EnvelopePeak(self.x, self.env, relmax)
                 self.peaks.append(ep)
 
     def down_sample(self, step):
         self.x = self.x[::step]
-        self.f = self.f[::step]
+        self.y = self.y[::step]
 
     def show(self, ax=None):
         if ax:
-            ax.plot(self.x, self.f)
+            ax.plot(self.x, self.y)
+            ax.plot(self.x, self.env)
             ax.grid(which='major', color='black', linestyle='-')
-            ax.plot(self.x, self._env)
 
             for ep in self.peaks:
                 ep.show(ax)
@@ -136,107 +124,26 @@ class WhiteLight(object):
 
     """
 
+    def spe_ana(self, wave, axis):
+        """
+        スペクトルアナライザー（スペクトルをプロット）
+
+        Parameters
+            wave : array
+                信号
+
+        """
+        number = len(wave)
+        spectrum = fftpack.fft(wave)
+        frecency = [abs(k * self.fs / number) for k in range(number)]
+        axis.plot(frecency, abs(spectrum))
+        axis.set_xlim([0, np.max(frecency) / 2])
     def __init__(self, fringe, fs):
         self.fringe = fringe
         self.fs = fs
         #   干渉縞を二乗
         self.fringe_sq_ = self.fringe * self.fringe
 
-    def opt_calc(self, wave, point, cof_HeNe, wave_len):
-        """
-        HeNe干渉縞から位置を計算
-        
-        Parameters
-            wave : array
-                He-Ne干渉縞データ
-            point : int
-                求めたいポイントのインデックス
-            cof_HeNe : float
-                He-Ne干渉縞のスムージング用カットオフ周波数
-            wave_len : float
-                He-Neレーザの波長
-        
-        Returns
-            position : float
-                He-Ne干渉縞から計算したpointの相対位置
-                光路長ベースでの計算
-                
-        """
-
-        def search_n(point, points, position='n'):
-            """
-            ある点から最も近い点群中の点のインデックスを返す
-
-            Parameters
-                point : float
-                    ある点
-                points : float
-                    点群
-                position : string
-                    左右の指定
-
-            Returns
-                point_opt : int
-                    ある点から最も近い点の点群中でのインデックス
-
-            Caution
-            点群中の点に一致するものがあるときはその点のインデックスを返す
-            """
-
-            point_opt = np.argmin(np.abs(np.array(points) - point))
-            # 最も近い点
-            if position == 'n':
-                return point_opt
-            # 最も近い右側の点
-            elif position == 'r':
-                if points[point_opt] >= point:
-                    return point_opt
-                else:
-                    return point_opt + 1
-            # 最も近い左側の点
-            elif position == 'l':
-                if points[point_opt] <= point:
-                    return point_opt
-                else:
-                    return point_opt - 1
-            else:
-                print('error')
-                sys.exit()
-
-        #   信号をスムージング
-        self.laser_smooth_ = lpf(wave, self.fs, cof_HeNe)
-        #   極大値を求める
-        maxes = signal.argrelmax(self.laser_smooth_)[0]
-        #   極小値を求める
-        mins = signal.argrelmin(self.laser_smooth_)[0]
-        #   内挿時のpointのy座標
-        point_l = math.floor(point)
-        f = interpolate.interp1d([point_l, point_l + 1], [self.laser_smooth_[point_l], self.laser_smooth_[point_l + 1]])
-        y_point = f(point)
-
-        #   point付近の極大、極小値を求める
-        M0 = maxes[search_n(point, maxes, position='l')]
-        M1 = maxes[search_n(point, maxes, position='r')]
-        m0 = mins[search_n(point, mins, position='l')]
-        m1 = mins[search_n(point, mins, position='r')]
-
-        #   M1の位置を基準とした位相を求める
-        # pointが極大値と一致するとき
-        if M0 == M1:
-            dn = 0
-        # pointがM1に近いとき(M0と比べて)
-        elif M0 <= m0 <= M1:
-            mid = (self.laser_smooth_[M0] + self.laser_smooth_[m1]) / 2
-            dn = -np.arccos((y_point - mid) / (self.laser_smooth_[M1] - mid))
-        # pointがM0に近いとき(M1と比べて)
-        else:
-            mid = (self.laser_smooth_[M0] + self.laser_smooth_[m1]) / 2
-            dn = -(np.pi * 2 - np.arccos((y_point - mid) / (self.laser_smooth_[M0] - mid)))
-        # arccosの中身がちょうど-1になるときはpiを返す
-        if np.isnan(dn):
-            dn = -np.pi
-        wave_number = list(maxes).index(M1) + dn / (2 * np.pi)
-        return wave_number * wave_len
 
     def calc_EPs(self, cof_env, ep_sens, method='SL', f_rate=0.5):
         """
@@ -312,13 +219,13 @@ class WhiteLight(object):
                 eps.append((coef[1]))
                 #   フィッティング後の包絡線をプロット
                 envelope = [gaussian(i, coef[0], coef[1], coef[2]) for i in x]
-                fig_gauss = plt.figure(3)
+                fig_gauss = plt.figure(1)
                 ax = fig_gauss.add_subplot(111)
                 ax.plot(x, y, "ro", markersize=2)
                 ax.plot(x, envelope, linewidth=3)
         else:
             print('定義されてない手法です')
-            sys.exit()
+            # sys.exit()
         return eps
 
 
@@ -329,7 +236,7 @@ class Sest(object):
     Parameters
         X ; array
             干渉縞の標本データ(y座標)
-        Y : array 
+        Y : array
             干渉縞の標本データ(x座標)
         lambda_c : float
             光源の中心波長
@@ -388,30 +295,28 @@ class Sest(object):
             plt.plot((min_delta[i] + max_delta[i]) / 2, 1, marker='o', color='r')
 
 
-def lpf(x, fs, fe):
+def lpf(f, fs, fc):
     """
     ローパスフィルター
 
     Parameters
-        x : array
+        f : array
             元の信号
         fs : float
             サンプリング周波数
-        fe : float
+        fc : float
             カットオフ周波数
 
     Returns
         y : array
             カットオフ後の信号
     """
-    X = fftpack.fft(x)
-    frecency = [abs(k * fs / len(x)) for k in range(len(x))]
-    for k, f in enumerate(frecency):
-        if (fe < f < frecency[-1] - fe) == 1:
-            X[k] = complex(0, 0)
-    y = np.real(fftpack.ifft(X))
+    freq = np.linspace(0, fs, len(f))
+    y = np.fft.fft(f)
+    y[ fc<freq ] = 0
+    y[0] = y[0] / 2
+    y = np.real( np.fft.ifft(y*2) )
     return y
-
 
 def bpf(x, fs, fe1, fe2):
     """
@@ -441,23 +346,3 @@ def bpf(x, fs, fe1, fe2):
     y = np.real(fftpack.ifft(X))
     return y
 
-
-def read_position(f_path):
-    """
-    ML-10のデータを読み込み
-
-    Parameters
-        f_path : string
-            ML-10データのパス
-
-    Returns
-        position : float
-            ML-10データの平均値
-    """
-    f = open(f_path)
-    lines = f.readlines()
-    data = []
-    for line in lines:
-        data.append(np.double(line))
-    position = np.average(data)
-    return position

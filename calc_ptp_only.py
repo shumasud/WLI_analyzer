@@ -13,18 +13,18 @@ Environment:
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import white_light
+import whitelight.core as wl
 plt.style.use('seaborn')
 
 
-def write_list(result, c_name, file='result\\result.csv'):
+def write_list(result, c_name, file='data\\result.csv'):
     """結果をCSVファイルに書き込み"""
     df = pd.DataFrame(result)
     df.columns = c_name
     df.to_csv(file)
 
 
-def read_fringe(f_path, start=0, end=0, skip_rows=0, mode='csv'):
+def read_fringe(f_path, start=0, end=0, skip_rows=0, *, mode='csv'):
     """
     干渉縞データの読み込み
 
@@ -44,17 +44,16 @@ def read_fringe(f_path, start=0, end=0, skip_rows=0, mode='csv'):
         data.append(df.iloc[start + skip_rows:end, 0].as_matrix().astype(np.float))
         data.append(df.iloc[start + skip_rows:end, 1].as_matrix().astype(np.float))
     elif mode == 'bin':
-        f = open(f_path, 'rb')
-        db = np.fromfile(f, dtype='<d')[1:]
-        f.close()
-        if end == 0:
-            data.append(db[:int(len(db) / 2)])
-            data.append(db[int(len(db) / 2):])
+        if end <= 0:
+            length = -1
         else:
-            data1 = db[:int(len(db) / 2)]
-            data2 = db[int(len(db) / 2):]
-            data.append(data1[start:end])
-            data.append(data2[start:end])
+            length = end
+        f = open(f_path, 'rb')
+        ds = np.fromfile(f, np.dtype('<i4'), 2)
+        db = np.fromfile(f, np.dtype('<d'), length)
+        f.close()
+        data = np.reshape(db, ds).tolist()
+
     return data
 
 
@@ -92,15 +91,15 @@ if __name__ == '__main__':
     start = 0
     end = 0
     fs = 100E3
-    f_path_head = 'data\\20180731\\4\\'
-    f_path_list = [str(i) for i in range(144403, 144503)]
+    f_path_head = 'data\\b6\\'
+    f_path_list = [str(i) for i in range(162700, 162708)]
     f_path_foot = '.bin'
     cof_env = 30
     ep_sens = 0.3
     method = 'HG'
     f_rate = 0.5
     calculation = True
-    plot = False
+    plot = True
 
     result = []
     for f_path in f_path_list:
@@ -115,7 +114,7 @@ if __name__ == '__main__':
             """干渉縞データをクラスに適合"""
             ave_fringe = np.average(fringe)
             fringe = fringe - ave_fringe
-            wave = white_light.WhiteLight(fringe, fs)
+            wave = wl.WhiteLight(fringe, fs)
             print(f_path)
 
             # """変位信号を低次関数で近似"""
@@ -138,7 +137,7 @@ if __name__ == '__main__':
 
             if calculation:
                 # 包絡線ピークのインデックスを求める
-                eps = wave.calc_eps(cof_env, ep_sens, method=method, f_rate=f_rate)
+                eps = wave.calc_EPs(cof_env, ep_sens, method=method, f_rate=f_rate)
                 dis_eps = [sig_DS_MA[int(eps[i+1])] - sig_DS_MA[int(eps[i])] for i in range(0, len(eps)-1)]
                 dis_ep = [dis_ep for dis_ep in dis_eps if dis_ep > 0.1][0]
                 time = int(f_path[0:2])*60*60 + int(f_path[2:4])*60 + int(f_path[4:6])
@@ -158,9 +157,10 @@ if __name__ == '__main__':
                 ax22 = fig_freq.add_subplot(212)
                 wave.spe_ana(wave.fringe_sq_, ax22)
                 ax22.set_title('Spectrum of Squared White Light Fringe')
-        except:
+        except Exception as err:
+            print(err)
             pass
-    write_list(result, ['time', 'ptp'])
+    # write_list(result, ['time', 'ptp'])
     if plot:
         plt.show()
 

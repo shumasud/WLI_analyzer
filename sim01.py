@@ -12,27 +12,29 @@ if __name__ == '__main__':
                  'scan_w': 300,
                  'scan_step': 10 / 1000}
 
-    noise = [0/1000, 5/1000]  # noise_x, noise_f
-    # noise = [0, 0]
+    noise = [0.5/1000, 5/1000]  # noise_x, noise_f
+    noise = [0, 0]
     peaks = [250, 350]
+    # peaks = [0]
 
     # initialize WLI fringes simulator
     ws = whitelight.simulator.FringesSimulator(**SIM_PARAM)
 
     # generate fringes
-    wav1 = ws.make_fringes(peaks=peaks, noise=noise)
-    wav2 = copy.deepcopy(wav1)
-    wav2.down_sample(10)
+    wav1 = ws.make_fringes(peaks=peaks, noise=noise, pows=(2,3))
+    # wav1.y = wav1.y - np.average(wav1.y)
+    # wav2 = copy.deepcopy(wav1)
+    # wav2.down_sample(10)
 
     # plot
     fig1 = plt.figure()
-    fig2 = plt.figure()
+    # fig2 = plt.figure()
     ax1 = fig1.add_subplot(111)
-    ax2 = fig2.add_subplot(111)
+    # ax2 = fig2.add_subplot(111)
     wav1.find_peaks(0.2)
-    wav2.find_peaks(0.2)
+    # wav2.find_peaks(0.2)
     wav1.show(ax1)
-    wav2.show(ax2)
+    # wav2.show(ax2)
     plt.show()
 
     # def write_list(result, c_name, file='result.csv'):
