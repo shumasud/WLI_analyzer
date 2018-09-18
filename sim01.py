@@ -33,7 +33,7 @@ if __name__ == '__main__':
     # ax2 = fig2.add_subplot(111)
     wav1.find_peaks(0.2)
     # wav2.find_peaks(0.2)
-    wav1.show(ax1)
+    wav1.plot(ax1)
     # wav2.show(ax2)
     plt.show()
 

@@ -52,11 +52,10 @@ class EnvelopePeak(object):
     def __str__(self):
         return 'peak[um] ({:.3f}, {:.3f})'.format(self.peak[0], self.peak[1])
 
-    def show(self, ax=None):
+    def plot(self, ax=None):
         if ax:
             ax.plot(self._x, self._y)
             ax.plot(self.peak[0], self.peak[1], 'o')
-        # print(self._x, self._y)
         return
 
 
@@ -95,14 +94,14 @@ class Fringes(object):
         self.x = self.x[::step]
         self.y = self.y[::step]
 
-    def show(self, ax=None):
+    def plot(self, ax=None):
         if ax:
             ax.plot(self.x, self.y)
             ax.plot(self.x, self.env)
             ax.grid(which='major', color='black', linestyle='-')
 
             for ep in self.peaks:
-                ep.show(ax)
+                ep.plot(ax)
             ax.legend(["fringe", "envelope", "fitting"])
 
 
